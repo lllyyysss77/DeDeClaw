@@ -1,18 +1,47 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Bell, User, Info, Upload, LogOut, Trash2, RefreshCw } from 'lucide-react';
+import {
+  Settings,
+  Bell,
+  User,
+  Info,
+  Upload,
+  LogOut,
+  Trash2,
+  LayoutDashboard,
+  Users,
+  Cable,
+  Wrench,
+  Logs,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import Select from '../components/Select';
 import Checkbox from '../components/Checkbox';
 import Toast, { type ToastType } from '../components/Toast';
+import DesktopAdminModules from './settings/DesktopAdminModules';
+import { authService } from '../services/authService';
+import type { UserNotificationsPreference, UserPreferences } from '../shared/types/auth';
+
+type SettingsSection =
+  | 'profile'
+  | 'general'
+  | 'notifications'
+  | 'about'
+  | 'admin-dashboard'
+  | 'admin-users'
+  | 'admin-api'
+  | 'admin-system'
+  | 'admin-logs';
 
 function SettingsPage() {
   const logoUrl = `${import.meta.env.BASE_URL}logo.svg`;
   const docsUrl = 'https://dedechat.apifox.cn/';
   const { t, i18n } = useTranslation();
-  const { user, workspace, logout, updateProfile } = useAuth();
-  const [activeSection, setActiveSection] = useState('profile');
-  const [language, setLanguage] = useState(i18n.language || 'zh-CN');
+  const { user, logout, updateProfile } = useAuth();
+  const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
+  const [language, setLanguage] = useState<UserPreferences['language']>(
+    i18n.language === 'en-US' ? 'en-US' : 'zh-CN',
+  );
   const [selectedTheme] = useState('light');
   const [isAvatarHovered, setIsAvatarHovered] = useState(false);
   const [username, setUsername] = useState(user?.username || '');
@@ -24,25 +53,8 @@ function SettingsPage() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<ToastType>('success');
   const [isToastVisible, setIsToastVisible] = useState(false);
-  const [memberRoles, setMemberRoles] = useState<Record<number, string>>({
-    1: 'admin',
-    2: 'member',
-    3: 'member',
-    4: 'guest',
-  });
-
-  const userUID = user?.userId || '';
-  const [spaceCode, setSpaceCode] = useState(workspace?.invitationCode || '');
-
-  const generateSpaceCode = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setSpaceCode(`${userUID}-${code}`);
-    showToast('邀请码已重新生成', 'success');
-  };
+  const hasPreferencesLoadedRef = useRef(false);
+  const lastSavedPreferencesRef = useRef<string>('');
 
   const handleOpenExternalLink = async () => {
     try {
@@ -60,19 +72,12 @@ function SettingsPage() {
   };
   const [autoStart, setAutoStart] = useState(true);
   const [minimizeToTray, setMinimizeToTray] = useState(false);
-  const [notifications, setNotifications] = useState({
+  const [notifications, setNotifications] = useState<UserNotificationsPreference>({
     newMessage: true,
     mention: true,
     systemUpdate: true,
     teamInvite: true,
   });
-
-  const roleOptions = [
-    { value: 'admin', label: t('settings.team.roles.admin') },
-    { value: 'member', label: t('settings.team.roles.member') },
-    { value: 'guest', label: t('settings.team.roles.guest') },
-    { value: 'remove', label: t('settings.team.roles.remove') },
-  ];
 
   const languageOptions = [
     { value: 'zh-CN', label: '简体中文' },
@@ -85,18 +90,31 @@ function SettingsPage() {
     { id: 'dark', label: t('settings.general.themes.dark'), image: '/dark-theme.png' },
   ];
 
-  const sections = [
+  const sections: { id: SettingsSection; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
     { id: 'profile', label: t('settings.sections.profile'), icon: User },
     // { id: 'team', label: t('settings.sections.team'), icon: Users },
     { id: 'general', label: t('settings.sections.general'), icon: Settings },
     { id: 'notifications', label: t('settings.sections.notifications'), icon: Bell },
+    { id: 'admin-dashboard', label: '概览看板', icon: LayoutDashboard },
+    { id: 'admin-users', label: '用户信息', icon: Users },
+    { id: 'admin-api', label: 'API 管理', icon: Cable },
+    { id: 'admin-system', label: '系统配置', icon: Wrench },
+    { id: 'admin-logs', label: '日志中心', icon: Logs },
     { id: 'about', label: t('settings.sections.about'), icon: Info },
   ];
 
+  const isAdminSection =
+    activeSection === 'admin-dashboard'
+    || activeSection === 'admin-users'
+    || activeSection === 'admin-api'
+    || activeSection === 'admin-system'
+    || activeSection === 'admin-logs';
+
   const handleLanguageChange = (nextLanguage: string) => {
-    setLanguage(nextLanguage);
-    localStorage.setItem('language', nextLanguage);
-    void i18n.changeLanguage(nextLanguage);
+    const normalizedLanguage: UserPreferences['language'] = nextLanguage === 'en-US' ? 'en-US' : 'zh-CN';
+    setLanguage(normalizedLanguage);
+    localStorage.setItem('language', normalizedLanguage);
+    void i18n.changeLanguage(normalizedLanguage);
   };
 
   useEffect(() => {
@@ -109,10 +127,85 @@ function SettingsPage() {
   }, [user]);
 
   useEffect(() => {
-    if (workspace) {
-      setSpaceCode(workspace.invitationCode);
+    const loadPreferences = async () => {
+      if (!user) {
+        hasPreferencesLoadedRef.current = true;
+        return;
+      }
+
+      const token = authService.getToken();
+      if (!token) {
+        hasPreferencesLoadedRef.current = true;
+        return;
+      }
+
+      try {
+        const response = await authService.fetchPreferences(token);
+        if (response.success && response.data) {
+          setLanguage(response.data.language);
+          setAutoStart(response.data.autoStart);
+          setMinimizeToTray(response.data.minimizeToTray);
+          setNotifications(response.data.notifications);
+          lastSavedPreferencesRef.current = JSON.stringify(response.data);
+          localStorage.setItem('language', response.data.language);
+          await i18n.changeLanguage(response.data.language);
+        }
+      } catch {
+        showToast('加载个人设置失败', 'error');
+      } finally {
+        hasPreferencesLoadedRef.current = true;
+      }
+    };
+
+    void loadPreferences();
+  }, [user]);
+
+  const savePreferences = async (payload: UserPreferences, successMessage?: string) => {
+    const token = authService.getToken();
+    if (!token) {
+      showToast('未登录，无法保存设置', 'error');
+      return;
     }
-  }, [workspace]);
+
+    try {
+      const response = await authService.savePreferences(payload, token);
+      if (!response.success) {
+        showToast(response.message ?? '保存设置失败', 'error');
+        return;
+      }
+      lastSavedPreferencesRef.current = JSON.stringify(payload);
+      if (successMessage) {
+        showToast(successMessage, 'success');
+      }
+    } catch {
+      showToast('保存设置失败', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (!hasPreferencesLoadedRef.current || !user) {
+      return;
+    }
+
+    const payload: UserPreferences = {
+      language,
+      autoStart,
+      minimizeToTray,
+      notifications,
+    };
+    const serializedPayload = JSON.stringify(payload);
+    if (serializedPayload === lastSavedPreferencesRef.current) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void savePreferences(payload);
+    }, 200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [autoStart, language, minimizeToTray, notifications, user]);
 
   const showToast = (message: string, type: ToastType) => {
     setToastMessage(message);
@@ -186,14 +279,14 @@ function SettingsPage() {
   };
 
   return (
-    <div className="flex-1 flex bg-[#F5F7FA]">
+    <div className="flex-1 grid min-w-0 grid-cols-[14rem_minmax(0,1fr)] overflow-hidden bg-[#F5F7FA]">
       <Toast
         message={toastMessage}
         type={toastType}
         isVisible={isToastVisible}
         onClose={() => setIsToastVisible(false)}
       />
-      <div className="w-64 bg-[#E8E9F3] border-r border-gray-100 flex flex-col">
+      <div className="w-56 min-w-[14rem] max-w-[14rem] bg-[#E8E9F3] border-r border-gray-100 flex flex-col">
         <div className="h-16 px-6 flex items-center border-b border-gray-200/50" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
           <div className="flex items-center gap-3">
             <Settings size={24} className="text-gray-700" />
@@ -216,17 +309,18 @@ function SettingsPage() {
                 }`}
               >
                 <Icon size={18} />
-                <span className="text-sm font-medium">{section.label}</span>
+                <span className="text-sm font-medium whitespace-nowrap truncate">{section.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          {activeSection === 'profile' && (
-            <div className="space-y-6">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-6" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="w-full min-w-0 max-w-6xl mx-auto">
+            {activeSection === 'profile' && (
+              <div className="space-y-6">
               <div className="bg-white rounded-xl p-6 shadow-sm">
                 <h3 className="font-semibold text-gray-900 mb-4">{t('settings.profile.title')}</h3>
                 <div className="flex items-center gap-6 mb-6">
@@ -261,7 +355,7 @@ function SettingsPage() {
                     />
                   </div>
                   <div className="flex-1 flex items-center justify-between">
-                    <div className="text-sm text-gray-500">UID: <span className="font-mono">{userUID}</span></div>
+                    <div className="text-sm text-gray-500">UID: <span className="font-mono">{user?.userId || ''}</span></div>
                     <button
                       onClick={handleProfileSave}
                       disabled={isSaving}
@@ -333,75 +427,11 @@ function SettingsPage() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeSection === 'team' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl p-6 shadow-sm">
-                <h3 className="font-semibold text-gray-900 mb-4">{t('settings.team.title')}</h3>
-                <div className="space-y-3">
-                  {[1, 2, 3, 4].map((member) => (
-                    <div key={member} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500" />
-                        <div>
-                          <div className="font-medium text-gray-900">{t('settings.team.members')} {member}</div>
-                          <div className="text-sm text-gray-500">member{member}@example.com</div>
-                        </div>
-                      </div>
-                      <div className="w-32">
-                        <Select
-                          options={roleOptions}
-                          value={memberRoles[member]}
-                          onChange={(value) => {
-                            if (value === 'remove') {
-                              console.log(`移除成员 ${member}`);
-                            } else {
-                              setMemberRoles({ ...memberRoles, [member]: value });
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
+            )}
 
-              <div className="bg-white rounded-xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">{t('settings.team.spaceCode')}</h3>
-                  <button 
-                    onClick={generateSpaceCode}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    title={t('settings.team.regenerate')}
-                  >
-                    <RefreshCw size={18} className="text-gray-600" />
-                  </button>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <div className="text-center">
-                    <div className="text-lg font-mono font-semibold text-gray-900 tracking-wider">
-                      {spaceCode}
-                    </div>
-                    <p className="text-sm text-gray-500 mt-2">{t('settings.team.spaceCodeDesc')}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(spaceCode);
-                    showToast('邀请码已复制到剪贴板', 'success');
-                  }}
-                  className="w-full px-6 py-2 bg-[#7678ee] text-white rounded-lg hover:bg-[#ff4f42] transition-colors"
-                >
-                  {t('settings.team.copySpaceCode')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {activeSection === 'general' && (
-            <div className="space-y-6">
+            {activeSection === 'general' && (
+              <div className="space-y-6">
               <div className="bg-white rounded-xl p-6 shadow-sm">
                 <h3 className="font-semibold text-gray-900 mb-4">{t('settings.general.theme')}</h3>
                 <div className="flex gap-3">
@@ -450,14 +480,13 @@ function SettingsPage() {
               </div>
               <div className="bg-white rounded-xl p-6 shadow-sm">
                 <h3 className="font-semibold text-gray-900 mb-4">{t('settings.general.startup')}</h3>
-                <div className="space-y-4 opacity-60">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between py-3 border-b border-gray-100">
                     <Checkbox
                       checked={autoStart}
                       onChange={setAutoStart}
                       label={t('settings.general.autoStart')}
-                      className="flex-1"
-                      disabled
+                      className="w-full justify-between"
                     />
                   </div>
                   <div className="flex items-center justify-between py-3">
@@ -465,26 +494,24 @@ function SettingsPage() {
                       checked={minimizeToTray}
                       onChange={setMinimizeToTray}
                       label={t('settings.general.minimizeToTray')}
-                      className="flex-1"
-                      disabled
+                      className="w-full justify-between"
                     />
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
 
-          {activeSection === 'notifications' && (
-            <div className="bg-white rounded-xl p-6 shadow-sm">
+            {activeSection === 'notifications' && (
+              <div className="bg-white rounded-xl p-6 shadow-sm">
               <h3 className="font-semibold text-gray-900 mb-4">{t('settings.notifications.title')}</h3>
-              <div className="space-y-4 opacity-60">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <Checkbox
                     checked={notifications.newMessage}
                     onChange={(checked) => setNotifications({ ...notifications, newMessage: checked })}
                     label={t('settings.notifications.newMessage')}
-                    className="flex-1"
-                    disabled
+                    className="w-full justify-between"
                   />
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
@@ -492,8 +519,7 @@ function SettingsPage() {
                     checked={notifications.mention}
                     onChange={(checked) => setNotifications({ ...notifications, mention: checked })}
                     label={t('settings.notifications.mention')}
-                    className="flex-1"
-                    disabled
+                    className="w-full justify-between"
                   />
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
@@ -501,8 +527,7 @@ function SettingsPage() {
                     checked={notifications.systemUpdate}
                     onChange={(checked) => setNotifications({ ...notifications, systemUpdate: checked })}
                     label={t('settings.notifications.systemUpdate')}
-                    className="flex-1"
-                    disabled
+                    className="w-full justify-between"
                   />
                 </div>
                 <div className="flex items-center justify-between py-3">
@@ -510,16 +535,15 @@ function SettingsPage() {
                     checked={notifications.teamInvite}
                     onChange={(checked) => setNotifications({ ...notifications, teamInvite: checked })}
                     label={t('settings.notifications.teamInvite')}
-                    className="flex-1"
-                    disabled
+                    className="w-full justify-between"
                   />
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
 
-          {activeSection === 'about' && (
-            <div className="space-y-6">
+            {activeSection === 'about' && (
+              <div className="space-y-6">
               <div className="bg-white rounded-xl p-6 shadow-sm">
                 <div className="flex flex-col items-center py-6">
                   <img
@@ -571,8 +595,18 @@ function SettingsPage() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
+
+            {isAdminSection && (
+              <div className="min-w-0">
+              <DesktopAdminModules
+                section={activeSection}
+                onFeedback={showToast}
+              />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

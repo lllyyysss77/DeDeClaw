@@ -224,6 +224,77 @@ const updateProfileSchema = z.object({
   avatar: z.string().optional(),
 });
 
+const defaultUserPreference: UserPreferencePayload = {
+  language: 'zh-CN',
+  autoStart: true,
+  minimizeToTray: false,
+  notifications: {
+    newMessage: true,
+    mention: true,
+    systemUpdate: true,
+    teamInvite: true,
+  },
+};
+
+const userPreferenceSchema = z.object({
+  language: z.enum(['zh-CN', 'en-US']),
+  autoStart: z.boolean(),
+  minimizeToTray: z.boolean(),
+  notifications: z.object({
+    newMessage: z.boolean(),
+    mention: z.boolean(),
+    systemUpdate: z.boolean(),
+    teamInvite: z.boolean(),
+  }),
+});
+
+interface UserPreferencePayload {
+  language: 'zh-CN' | 'en-US';
+  autoStart: boolean;
+  minimizeToTray: boolean;
+  notifications: {
+    newMessage: boolean;
+    mention: boolean;
+    systemUpdate: boolean;
+    teamInvite: boolean;
+  };
+}
+
+interface UserPreferenceRecord {
+  language: string;
+  autoStart: boolean;
+  minimizeToTray: boolean;
+  notifyNewMessage: boolean;
+  notifyMention: boolean;
+  notifySystemUpdate: boolean;
+  notifyTeamInvite: boolean;
+}
+
+interface UserPreferenceDelegate {
+  findUnique: (args: unknown) => Promise<UserPreferenceRecord | null>;
+  upsert: (args: unknown) => Promise<UserPreferenceRecord>;
+}
+
+const userPreferenceModel = (prisma as unknown as { userPreference: UserPreferenceDelegate }).userPreference;
+
+const mapPreference = (preference: UserPreferenceRecord | null): UserPreferencePayload => {
+  if (!preference) {
+    return defaultUserPreference;
+  }
+
+  return {
+    language: preference.language === 'en-US' ? 'en-US' : 'zh-CN',
+    autoStart: preference.autoStart,
+    minimizeToTray: preference.minimizeToTray,
+    notifications: {
+      newMessage: preference.notifyNewMessage,
+      mention: preference.notifyMention,
+      systemUpdate: preference.notifySystemUpdate,
+      teamInvite: preference.notifyTeamInvite,
+    },
+  };
+};
+
 router.patch('/profile', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const validatedData = updateProfileSchema.parse(req.body);
@@ -263,6 +334,82 @@ router.patch('/profile', authMiddleware, async (req: AuthRequest, res: Response)
     }
     console.error('Update profile error:', error);
     res.status(500).json({ success: false, message: '更新失败，请稍后重试' });
+  }
+});
+
+router.get('/preferences', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const preference = await userPreferenceModel.findUnique({
+      where: { userId: req.userId },
+      select: {
+        language: true,
+        autoStart: true,
+        minimizeToTray: true,
+        notifyNewMessage: true,
+        notifyMention: true,
+        notifySystemUpdate: true,
+        notifyTeamInvite: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: mapPreference(preference),
+    });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({ success: false, message: '获取设置失败，请稍后重试' });
+  }
+});
+
+router.put('/preferences', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const validated = userPreferenceSchema.parse(req.body);
+
+    const saved = await userPreferenceModel.upsert({
+      where: { userId: req.userId! },
+      create: {
+        userId: req.userId!,
+        language: validated.language,
+        autoStart: validated.autoStart,
+        minimizeToTray: validated.minimizeToTray,
+        notifyNewMessage: validated.notifications.newMessage,
+        notifyMention: validated.notifications.mention,
+        notifySystemUpdate: validated.notifications.systemUpdate,
+        notifyTeamInvite: validated.notifications.teamInvite,
+      },
+      update: {
+        language: validated.language,
+        autoStart: validated.autoStart,
+        minimizeToTray: validated.minimizeToTray,
+        notifyNewMessage: validated.notifications.newMessage,
+        notifyMention: validated.notifications.mention,
+        notifySystemUpdate: validated.notifications.systemUpdate,
+        notifyTeamInvite: validated.notifications.teamInvite,
+      },
+      select: {
+        language: true,
+        autoStart: true,
+        minimizeToTray: true,
+        notifyNewMessage: true,
+        notifyMention: true,
+        notifySystemUpdate: true,
+        notifyTeamInvite: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: '设置保存成功',
+      data: mapPreference(saved),
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ success: false, message: error.issues[0].message });
+      return;
+    }
+    console.error('Update preferences error:', error);
+    res.status(500).json({ success: false, message: '保存设置失败，请稍后重试' });
   }
 });
 

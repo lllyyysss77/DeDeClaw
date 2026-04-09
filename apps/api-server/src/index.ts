@@ -10,7 +10,6 @@ import { systemConfigRouter } from './routes/systemConfig.js';
 import agentRouter from './routes/agent.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
-import agentHireRouter from './routes/agentHire.js';
 import channelRouter from './routes/channel.js';
 import libraryRouter from './routes/library.js';
 import assetsRouter from './routes/assets.js';
@@ -23,21 +22,20 @@ import { initializeDefaultAdmin } from './lib/init.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const resolveEnvPath = (): string => {
+const resolveEnvPath = (): string | null => {
   const candidatePaths = [
     resolve(__dirname, '../../../.env.local'),
     resolve(__dirname, '../../../.env'),
   ];
 
   const matchedPath = candidatePaths.find((candidatePath) => existsSync(candidatePath));
-  if (!matchedPath) {
-    throw new Error('[API Server] 未找到 .env.local 或 .env 文件');
-  }
-
-  return matchedPath;
+  return matchedPath ?? null;
 };
 
-dotenv.config({ path: resolveEnvPath() });
+const envPath = resolveEnvPath();
+if (envPath) {
+  dotenv.config({ path: envPath });
+}
 
 const requirePortFromEnv = (key: string): number => {
   const rawValue = process.env[key];
@@ -152,7 +150,6 @@ app.use('/admin/users', usersRouter);
 app.use('/admin/model-configs', modelConfigRouter);
 app.use('/admin/system-config', systemConfigRouter);
 app.use('/admin/agents', agentRouter);
-app.use('/agent-hire', agentHireRouter);
 app.use('/channels', channelRouter);
 app.use('/library', libraryRouter);
 app.use('/assets', assetsRouter);

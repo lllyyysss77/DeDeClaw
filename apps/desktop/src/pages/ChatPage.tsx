@@ -6,10 +6,10 @@ import CreateChannelModal from '../components/CreateChannelModal';
 import ChannelSettingsModal from '../components/ChannelSettingsModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { Conversation, Message } from '../mockData';
-import { agentHireService } from '../services/agentHireService';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import { assetsService } from '../services/assetsService';
+import { fetchListedAgents } from '../services/adminService';
 import { useAuth } from '../contexts/AuthContext';
 import type { Agent } from '@/shared/types/agent';
 import type { ChannelData as ChannelApiData, ChannelMessageData } from '../shared/types/channel';
@@ -33,6 +33,7 @@ function apiMsgToMessage(m: Record<string, unknown>, currentUserId: string): Mes
   const isUser = m.senderType === 'user';
   const isPlan = m.senderType === 'plan';
   const isConfirm = m.senderType === 'confirm';
+  const isSystem = m.senderType === 'system';
   const ragSources = Array.isArray(m.ragSources)
     ? (m.ragSources.filter((s): s is string => typeof s === 'string'))
     : [];
@@ -65,10 +66,12 @@ function apiMsgToMessage(m: Record<string, unknown>, currentUserId: string): Mes
     conversationId: m.channelId as string,
     ...(isUser
       ? { userId: m.senderId as string, userName: m.senderName as string }
+      : isSystem
+      ? {}
       : { agentId: m.senderId as string, agentName: m.senderName as string }),
     avatar: normalizeAvatar(m.senderAvatar as string | null),
     content: m.content as string,
-    type: isPlan ? 'dede_plan' : 'text',
+    type: isSystem ? 'system' : isPlan ? 'dede_plan' : 'text',
     metadata: messageMetadata,
     isSelf: isUser && (currentUserId ? m.senderId === currentUserId : true),
     createdAt: new Date(m.createdAt as string),
@@ -147,6 +150,13 @@ function ChatPage({ onGoToAssets, pendingOpenChannel, onPendingOpenChannelHandle
   const [libraryTagByChannel, setLibraryTagByChannel] = useState<Record<string, string>>({});
   // 用 ref 持有最新的 selectedConversationId，供 SSE 回调闭包读取
   const selectedConversationIdRef = useRef(selectedConversationId);
+  // 用 ref 持有最新的 isSending，供 syncChannels 闭包读取，避免过期闭包
+  const isSendingRef = useRef(false);
+  useEffect(() => { isSendingRef.current = isSending; }, [isSending]);
+  // 用 ref 持有最新的 conversations，供 syncChannels 直接对比变化（避免在 setConversations updater 里做副作用）
+  const conversationsRef = useRef<Conversation[]>([]);
+  // 每次渲染时同步更新，确保 syncChannels 异步回调读到最新值
+  conversationsRef.current = conversations;
 
   const { user: authUser } = useAuth();
   // 优先用 AuthContext 里的 user（登录后立即可用），降级到 localStorage
@@ -275,25 +285,92 @@ function ChatPage({ onGoToAssets, pendingOpenChannel, onPendingOpenChannelHandle
   }, [currentUserId, historyStateByChannel]);
 
   const loadHiredAgents = useCallback(async () => {
-    const agentsRes = await agentHireService.getMyAgents();
-    if (agentsRes.success) {
-      setHiredAgents(agentsRes.data);
-    }
+    const agents = await fetchListedAgents();
+    setHiredAgents(agents);
   }, []);
+
+  const syncChannels = useCallback(async () => {
+    const channelsRes = await channelService.getChannels();
+    if (!channelsRes.success || !channelsRes.data) {
+      return;
+    }
+
+    const selectedId = selectedConversationIdRef.current;
+    const nextConversations = channelsRes.data.map((channel) =>
+      mapChannelToConversation(channel, defaultChannelAvatar),
+    );
+
+    if (!selectedId && nextConversations[0]?.id) {
+      setSelectedConversationId(nextConversations[0].id);
+    } else if (selectedId && !nextConversations.some((conversation) => conversation.id === selectedId)) {
+      setSelectedConversationId(nextConversations[0]?.id || '');
+    }
+
+    // 直接用 ref 对比当前 conversations，找出有变化的频道
+    // 注意：不能依赖 setConversations updater 的副作用——React 18 updater 是延迟执行的，
+    // 在 updater 里给外部 Set 赋值时，外部代码检查 Set 时 updater 尚未运行，导致 Set 为空。
+    const currentConversations = conversationsRef.current;
+    const prevMap = new Map(currentConversations.map((c) => [c.id, c]));
+    const pinnedMap = new Map(currentConversations.map((c) => [c.id, c.isPinned]));
+
+    const channelsToInvalidate = new Set<string>();
+    const mergedConversations = nextConversations.map((next) => {
+      const prev = prevMap.get(next.id);
+      if (
+        prev &&
+        (prev.lastMessage !== next.lastMessage ||
+          (prev.members ?? []).join(',') !== (next.members ?? []).join(','))
+      ) {
+        channelsToInvalidate.add(next.id);
+      }
+      return { ...next, isPinned: pinnedMap.get(next.id) ?? false };
+    });
+
+    const pinned = mergedConversations.filter((c) => c.isPinned);
+    const unpinned = mergedConversations.filter((c) => !c.isPinned);
+    setConversations([...pinned, ...unpinned]);
+
+    // 清除有变化频道的消息缓存（发送中时跳过，避免打断流式输出）
+    // 清除后，监听 messages[selectedConversationId] 的 useEffect 会自动触发重新拉取
+    if (channelsToInvalidate.size > 0 && !isSendingRef.current) {
+      setMessages((prev) => {
+        const next = { ...prev };
+        for (const id of channelsToInvalidate) {
+          delete next[id];
+        }
+        return next;
+      });
+    }
+  }, [defaultChannelAvatar]);
 
   useEffect(() => {
     Promise.all([
       loadHiredAgents(),
-      channelService.getChannels(),
-    ]).then(([, channelsRes]) => {
-      if (channelsRes.success && channelsRes.data) {
-        const dbChannels: Conversation[] = channelsRes.data.map((ch: ChannelApiData) => mapChannelToConversation(ch, defaultChannelAvatar));
-        const firstId = dbChannels[0]?.id || '';
-        setConversations(dbChannels);
-        setSelectedConversationId((prev) => prev || firstId);
-      }
-    });
-  }, [defaultChannelAvatar, loadHiredAgents]);
+      syncChannels(),
+    ]);
+  }, [loadHiredAgents, syncChannels]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void syncChannels();
+    }, 3000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [syncChannels]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void syncChannels();
+      void loadHiredAgents();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadHiredAgents, syncChannels]);
 
   useEffect(() => {
     if (!pendingOpenChannel) {

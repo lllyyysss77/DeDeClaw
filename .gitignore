@@ -1,40 +1,69 @@
-node_modules
+# 依赖
+node_modules/
+.pnp
+.pnp.js
 
-# Build outputs
-dist
-release
+# 环境变量
+.env
+.env.local
+.env.production
+.env.*.local
 
-# TypeScript cache
-*.tsbuildinfo
-vite.config.d.ts
+# Next.js
+.next/
+out/
+build/
+dist/
 
-# Lock files (pnpm only)
-package-lock.json
-yarn.lock
+# Electron
+apps/desktop/dist/
+apps/desktop/web-static/
+apps/desktop/release/
+apps/desktop/.api-server-bundle/
 
-# Logs
+# 知识库上传文件（重要：不提交到 Git）
+library_files/
+apps/web/public/uploads/
+public/uploads/
+uploads/
+
+# 数据库
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# 日志
+logs/
 *.log
 npm-debug.log*
-pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Env files
-.env
-.env.*
-!.env.example
-
-# OS / IDE
+# 操作系统
 .DS_Store
 Thumbs.db
-.idea
-.vscode
 
-# Coverage / temp
-coverage
-.cache
-tmp
-temp
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Runtime user data
-apps/api-server/library_files
+# 测试
+coverage/
+.nyc_output/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# PM2
+ecosystem.config.js
+.pm2/
+
+# Prisma
+prisma/migrations/**/migration.sql

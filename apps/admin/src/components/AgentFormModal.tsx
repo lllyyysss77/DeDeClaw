@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
-import Toggle from '@/components/Toggle';
 import ImageUpload from '@/components/ImageUpload';
 import type { Agent, ModelProviderConfig } from '@/shared/types/admin';
 import styles from '@/pages/PageLayout.module.css';
@@ -14,7 +13,6 @@ interface AgentFormData {
   priceRate: number;
   priceUnit: string;
   modelId: string;
-  isListed: boolean;
 }
 
 interface AgentFormModalProps {
@@ -40,7 +38,6 @@ const buildFormData = (
       priceRate: 1.0,
       priceUnit: 'hour',
       modelId: '',
-      isListed: false,
     };
   }
 
@@ -53,7 +50,6 @@ const buildFormData = (
     priceRate: initialData?.priceRate ?? 1.0,
     priceUnit: initialData?.priceUnit ?? 'hour',
     modelId: initialData?.modelId ?? '',
-    isListed: initialData?.isListed ?? false,
   };
 };
 
@@ -191,18 +187,6 @@ export default function AgentFormModal({
           </p>
         </label>
 
-        <div className={styles.field}>
-          <div className="flex items-center justify-between">
-            <span className={styles.label}>上架状态</span>
-            <Toggle
-              checked={form.isListed}
-              onChange={(checked) => setForm((prev) => ({ ...prev, isListed: checked }))}
-            />
-          </div>
-          <p className={styles.note}>
-            {form.isListed ? '客户端可见，用户可以选择' : '客户端不可见'}
-          </p>
-        </div>
       </div>
     </Modal>
   );

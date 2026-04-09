@@ -189,20 +189,6 @@ router.post('/create', authMiddleware, async (req: AuthRequest, res: Response): 
 
     if (isHiredTalentChat) {
       const talentAgentId = normalizedAgentIds[0];
-      const hire = await prisma.agentHire.findUnique({
-        where: {
-          userId_agentId: {
-            userId,
-            agentId: talentAgentId,
-          },
-        },
-      });
-
-      if (!hire?.isActive) {
-        res.status(403).json({ success: false, message: '仅可为已雇佣人才创建会话' });
-        return;
-      }
-
       const existingChannel = await prisma.channel.findFirst({
         where: {
           workspaceId,

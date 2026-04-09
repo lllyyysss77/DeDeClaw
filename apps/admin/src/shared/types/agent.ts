@@ -12,7 +12,6 @@ export interface Agent {
   priceRate: number;
   priceUnit: string;
   modelId: string | null;
-  isListed: boolean;
   createdAt: string;
   updatedAt: string;
 }

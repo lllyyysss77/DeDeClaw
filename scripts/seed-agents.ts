@@ -88,20 +88,10 @@ async function main() {
 
     console.log(`✓ 创建 Agent: ${name} (${agentId}) - ${role}`);
 
-    // 为用户雇佣该 Agent
-    await prisma.agentHire.create({
-      data: {
-        userId,
-        agentId,
-      },
-    });
-
-    console.log(`  ✓ 已雇佣`);
-
     createdAgents.push(agent);
   }
 
-  console.log(`\n✅ 成功创建并雇佣 ${createdAgents.length} 个 Agent`);
+  console.log(`\n✅ 成功创建 ${createdAgents.length} 个 Agent`);
   console.log(`\nAgent 列表：`);
   createdAgents.forEach((agent, index) => {
     console.log(`${index + 1}. ${agent.name} - ${agent.role} (${agent.priceRate}x/小时)`);

@@ -11,12 +11,13 @@
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
-    "package": "electron-builder --publish never",
-    "package:dmg": "electron-builder --mac dmg --publish never",
-    "package:dir": "electron-builder --mac dir --publish never",
-    "package:win": "electron-builder --win nsis --publish never",
-    "package:win-dir": "electron-builder --win dir --x64 --publish never",
-    "package:win-portable": "electron-builder --win portable --x64 --publish never"
+    "bundle:api": "node scripts/bundle-api-server.mjs",
+    "package": "npm run bundle:api && electron-builder --publish never",
+    "package:dmg": "npm run bundle:api && electron-builder --mac dmg --publish never",
+    "package:dir": "npm run bundle:api && electron-builder --mac dir --publish never",
+    "package:win": "npm run bundle:api && electron-builder --win nsis --publish never",
+    "package:win-dir": "npm run bundle:api && electron-builder --win dir --x64 --publish never",
+    "package:win-portable": "npm run bundle:api && electron-builder --win portable --x64 --publish never"
   },
   "build": {
     "appId": "com.dede.desktop",
@@ -28,6 +29,28 @@
       "dist/main/**/*",
       "dist/renderer/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".api-server-bundle/dist",
+        "to": "api-server/dist"
+      },
+      {
+        "from": ".api-server-bundle/node_modules",
+        "to": "api-server/node_modules"
+      },
+      {
+        "from": ".api-server-bundle/package.json",
+        "to": "api-server/package.json"
+      },
+      {
+        "from": ".api-server-bundle/prisma",
+        "to": "api-server/prisma"
+      },
+      {
+        "from": "resources/postgres",
+        "to": "postgres"
+      }
     ],
     "win": {
       "target": [
@@ -41,13 +64,13 @@
         "dmg"
       ],
       "category": "public.app-category.productivity",
-      "icon": "build/icon.icns",
+      "icon": "public/logo-1024.png",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
-      "icon": "build/icon.icns"
+      "icon": "public/logo-1024.png"
     }
   },
   "dependencies": {

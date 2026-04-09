@@ -11,6 +11,7 @@ interface ModalProps {
   cancelText?: string;
   confirmButtonVariant?: 'danger' | 'primary';
   footerLeft?: React.ReactNode;
+  maxWidth?: string;
 }
 
 function Modal({
@@ -23,6 +24,7 @@ function Modal({
   cancelText = '取消',
   confirmButtonVariant = 'primary',
   footerLeft,
+  maxWidth = 'max-w-md',
 }: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -42,15 +44,12 @@ function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* 背景遮罩 */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
       {/* 模态窗内容 */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${maxWidth} mx-4 flex flex-col`} style={{ maxHeight: 'calc(100vh - 80px)' }}>
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}
@@ -61,12 +60,12 @@ function Modal({
         </div>
 
         {/* 内容区域 */}
-        <div className="px-6 py-5 text-sm text-gray-600">
+        <div className="px-6 py-5 text-sm text-gray-600 overflow-y-auto min-h-0 flex-1">
           {children}
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
+        <div className="flex items-center justify-between gap-3 px-6 py-3 bg-gray-50 border-t border-gray-100 shrink-0 rounded-b-2xl">
           <div className="min-w-0">{footerLeft}</div>
           <div className="flex items-center gap-3">
             <button

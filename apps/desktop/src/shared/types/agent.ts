@@ -15,6 +15,8 @@ export interface Agent {
 export interface AgentFull extends Agent {
   id: string;
   isListed: boolean;
+  prompt: string | null;
+  skills: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -23,11 +23,7 @@ async function main() {
   const channelResult = await prisma.channel.deleteMany({});
   console.log(`✓ 已删除频道: ${channelResult.count} 个`);
 
-  // 4. 清空 Agent 雇佣记录
-  const hireResult = await prisma.agentHire.deleteMany({});
-  console.log(`✓ 已删除雇佣记录: ${hireResult.count} 条`);
-
-  // 5. 清空人才市场 Agent
+  // 4. 清空人才市场 Agent
   const agentResult = await prisma.agent.deleteMany({});
   console.log(`✓ 已删除人才: ${agentResult.count} 个`);
 

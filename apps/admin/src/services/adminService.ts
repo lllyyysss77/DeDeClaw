@@ -132,7 +132,6 @@ export const createAgent = async (payload: {
   priceRate: number;
   priceUnit: string;
   modelId?: string;
-  isListed: boolean;
 }): Promise<boolean> => {
   const result = await requestJson<Agent>('/admin/agents', {
     method: 'POST',
@@ -153,7 +152,6 @@ export const updateAgent = async (
     priceRate?: number;
     priceUnit?: string;
     modelId?: string | null;
-    isListed?: boolean;
   }
 ): Promise<boolean> => {
   const result = await requestJson<Agent>(`/admin/agents/${agentId}`, {

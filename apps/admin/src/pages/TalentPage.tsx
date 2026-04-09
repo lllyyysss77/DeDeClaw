@@ -3,7 +3,6 @@ import { Plus, Trash2 } from 'lucide-react';
 import PageCard from '@/components/PageCard';
 import PageErrorBoundary from '@/components/PageErrorBoundary';
 import Toast from '@/components/Toast';
-import Toggle from '@/components/Toggle';
 import Modal from '@/components/Modal';
 import AgentFormModal from '@/components/AgentFormModal';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -357,23 +356,6 @@ export default function TalentPage() {
     }
   };
 
-  const handleToggle = async (agent: Agent) => {
-    const isSuccess = await updateAgent(agent.agentId, {
-      isListed: !agent.isListed,
-    });
-
-    if (!isSuccess) {
-      showFeedback('error', '状态更新失败');
-      return;
-    }
-
-    setAgents((prev) =>
-      prev.map((item) =>
-        item.agentId === agent.agentId ? { ...item, isListed: !item.isListed } : item
-      )
-    );
-  };
-
   const handleSubmit = async (formData: {
     name: string;
     avatar: string;
@@ -383,7 +365,6 @@ export default function TalentPage() {
     priceRate: number;
     priceUnit: string;
     modelId: string;
-    isListed: boolean;
   }) => {
     if (modalMode === 'create') {
       const isSuccess = await createAgent({
@@ -413,7 +394,6 @@ export default function TalentPage() {
         priceRate: formData.priceRate,
         priceUnit: formData.priceUnit,
         modelId: formData.modelId || null,
-        isListed: formData.isListed,
       });
 
       if (!isSuccess) {
@@ -492,7 +472,6 @@ export default function TalentPage() {
           prompt: item.prompt,
           skills: item.skills,
           modelId: defaultModelId,
-          isListed: true,
           priceRate: 1.0,
           priceUnit: 'hour',
         });
@@ -589,14 +568,13 @@ export default function TalentPage() {
                         <th className="text-left text-xs text-gray-600 py-3 px-3">岗位</th>
                         <th className="text-left text-xs text-gray-600 py-3 px-3">倍率/小时</th>
                         <th className="text-left text-xs text-gray-600 py-3 px-3">模型</th>
-                        <th className="text-left text-xs text-gray-600 py-3 px-3">上架</th>
                         <th className="text-left text-xs text-gray-600 py-3 px-3">操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {agents.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="text-center py-8 text-gray-400 text-sm">
+                          <td colSpan={7} className="text-center py-8 text-gray-400 text-sm">
                             暂无人才数据，点击上方按钮添加
                           </td>
                         </tr>
@@ -646,9 +624,6 @@ export default function TalentPage() {
                                 ) : (
                                   <span className="text-gray-400">未绑定</span>
                                 )}
-                              </td>
-                              <td className="py-3 px-3">
-                                <Toggle checked={agent.isListed} onChange={() => handleToggle(agent)} />
                               </td>
                               <td className="py-3 px-3">
                                 <div className="flex items-center gap-2">

@@ -42,14 +42,14 @@ function ChannelSettingsModal({ isOpen, onClose, channel, onUpdate, onDelete }: 
   };
 
   useEffect(() => {
-    if (channel) {
+    if (channel && isOpen) {
       setName(channel.name);
       setAvatar(channel.avatar || '');
       setIsMuted(channel.isMuted || false);
+      setShowDeleteConfirm(false);
+      setIsAvatarPickerOpen(false);
     }
-    setShowDeleteConfirm(false);
-    setIsAvatarPickerOpen(false);
-  }, [channel, isOpen]);
+  }, [channel?.id, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {

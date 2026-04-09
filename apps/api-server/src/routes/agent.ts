@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { prisma } from '../lib/prisma.js';
 
 const router = Router();
@@ -73,11 +74,10 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/agents/listed - 获取已上架的 Agent (供客户端调用)
+// GET /admin/agents/listed - 获取可用 Agent（创建即用，返回全部）
 router.get('/listed', async (_req: Request, res: Response) => {
   try {
     const agents = await prisma.agent.findMany({
-      where: { isListed: true },
       orderBy: { createdAt: 'desc' },
       select: {
         agentId: true,
@@ -166,7 +166,7 @@ router.post('/', async (req: Request, res: Response) => {
       priceRate: data.priceRate,
       priceUnit: data.priceUnit,
       modelId: data.modelId,
-      isListed: data.isListed,
+      isListed: true,
       ...(data.prompt !== undefined ? { prompt: data.prompt } : {}),
       ...(data.skills !== undefined ? { skills: data.skills } : {}),
     };
@@ -227,7 +227,6 @@ router.put('/:agentId', async (req: Request, res: Response) => {
       priceRate: data.priceRate,
       priceUnit: data.priceUnit,
       modelId: data.modelId,
-      isListed: data.isListed,
       ...(data.prompt !== undefined ? { prompt: data.prompt } : {}),
       ...(data.skills !== undefined ? { skills: data.skills } : {}),
     };
@@ -270,8 +269,48 @@ router.delete('/:agentId', async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.agent.delete({
-      where: { agentId },
+    await prisma.$transaction(async (tx) => {
+      const affectedChannels = await tx.channel.findMany({
+        where: {
+          agentIds: {
+            has: agentId,
+          },
+        },
+        select: {
+          channelId: true,
+          agentIds: true,
+        },
+      });
+
+      for (const channel of affectedChannels) {
+        const nextAgentIds = channel.agentIds.filter((id) => id !== agentId);
+        const removedNotice = `成员已移除：${existingAgent.name}`;
+        const now = new Date();
+
+        await tx.channel.update({
+          where: { channelId: channel.channelId },
+          data: {
+            agentIds: nextAgentIds,
+            lastMessage: removedNotice,
+            lastMessageTime: now,
+          },
+        });
+
+        await tx.message.create({
+          data: {
+            messageId: `MSG${nanoid(10)}`,
+            channelId: channel.channelId,
+            senderType: 'system',
+            senderId: 'system',
+            senderName: '系统',
+            content: removedNotice,
+          },
+        });
+      }
+
+      await tx.agent.delete({
+        where: { agentId },
+      });
     });
 
     return res.json({

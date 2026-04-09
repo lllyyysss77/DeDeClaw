@@ -6,6 +6,8 @@ import type {
   VerifyTokenResponse,
   UpdateProfileRequest,
   UpdateProfileResponse,
+  UserPreferences,
+  UserPreferencesResponse,
 } from '../shared/types/auth';
 import { API_BASE_URL } from './apiBase';
 
@@ -20,6 +22,30 @@ export const authService = {
     });
 
     return response.json();
+  },
+
+  async fetchPreferences(token: string): Promise<UserPreferencesResponse> {
+    const response = await fetch(`${API_BASE_URL}/auth/preferences`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    return response.json() as Promise<UserPreferencesResponse>;
+  },
+
+  async savePreferences(data: UserPreferences, token: string): Promise<UserPreferencesResponse> {
+    const response = await fetch(`${API_BASE_URL}/auth/preferences`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    return response.json() as Promise<UserPreferencesResponse>;
   },
 
   async login(data: LoginRequest): Promise<LoginResponse> {

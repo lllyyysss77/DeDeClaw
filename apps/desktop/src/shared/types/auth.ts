@@ -89,3 +89,23 @@ export interface UpdateProfileResponse {
     user: User;
   };
 }
+
+export interface UserNotificationsPreference {
+  newMessage: boolean;
+  mention: boolean;
+  systemUpdate: boolean;
+  teamInvite: boolean;
+}
+
+export interface UserPreferences {
+  language: 'zh-CN' | 'en-US';
+  autoStart: boolean;
+  minimizeToTray: boolean;
+  notifications: UserNotificationsPreference;
+}
+
+export interface UserPreferencesResponse {
+  success: boolean;
+  message?: string;
+  data?: UserPreferences;
+}

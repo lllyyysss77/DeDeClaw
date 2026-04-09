@@ -68,9 +68,28 @@ model User {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   workspaceMembers  WorkspaceMember[]
+  preference        UserPreference?
 
   @@index([email])
   @@map("users")
+}
+
+model UserPreference {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  language             String   @default("zh-CN")
+  autoStart            Boolean  @default(true)
+  minimizeToTray       Boolean  @default(false)
+  notifyNewMessage     Boolean  @default(true)
+  notifyMention        Boolean  @default(true)
+  notifySystemUpdate   Boolean  @default(true)
+  notifyTeamInvite     Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_preferences")
 }
 
 model Workspace {
